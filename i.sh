@@ -20,10 +20,14 @@ PUBLIC_KEY
 #!/usr/bin/env bash
 # Ed25519 signature binds the payload and version to the maintainer key.
 release_verify() {
-  local dir=$1 pub=$2 version=$3 sha declared
+  local dir=$1 pub=$2 version=$3 sha declared lines
   [[ -s $dir/manifest && -s $dir/manifest.sig && -s $pub ]] || return 1
   openssl pkeyutl -verify -pubin -inkey "$pub" -rawin -in "$dir/manifest" -sigfile "$dir/manifest.sig" >/dev/null 2>&1 || return 1
-  [[ $(wc -l <"$dir/manifest") == 2 ]] || return 1
+  # 旧更新器只接受两行清单，因此会在触碰脚本和备份之前拒绝这个包。
+  lines=$(wc -l <"$dir/manifest") || return 1
+  if [[ $lines != 3 || $(sed -n '3p' "$dir/manifest") != manifest-v2 ]]; then
+    [[ ${4:-} == reinstall && $lines == 2 ]] || return 1
+  fi
   declared=$(sed -n '1p' "$dir/manifest"); sha=$(sed -n '2p' "$dir/manifest")
   [[ $declared == "$version" && $declared =~ ^[0-9]+\.[0-9]+\.[0-9]+$ && $sha =~ ^[a-f0-9]{64}$ ]] || return 1
   [[ $(sha256sum "$dir/p.tgz" | cut -d' ' -f1) == "$sha" ]]
@@ -39,16 +43,9 @@ tar -xzf "$T/p.tgz" -C "$T" || { echo "安装包无法解包"; exit 1; }
 echo "[✓] 安装包版本 $VERSION（签名通过）"
 # Existing installations use the transactional updater without regenerating parameters.
 if [[ -L /usr/local/bin/sb && -f $(readlink -f /usr/local/bin/sb) ]]; then
-  (
-  # Existing libraries use explicit return checks, not nounset/errexit.
-  set +eu
-  export SB_HOME; SB_HOME=$(dirname "$(readlink -f /usr/local/bin/sb)")
-  source "$SB_HOME/lib/load.sh"
+  SB_HOME=$(dirname "$(readlink -f /usr/local/bin/sb)")
   release_verify "$T" "$SB_HOME/lib/release.pub" "$VERSION" || { echo "与已安装公钥不匹配"; exit 1; }
-  source "$T/installer/lib/self.sh"
-  self_repo() { printf '%s\n' "$RAW"; }
-  with_lock self_update "" "$T/installer/lib/release-verify.sh"
-  )
+  bash "$T/installer/install.sh" --upgrade-only
 else
   bash "$T/installer/install.sh" --repo "$RAW" "$@"
 fi
