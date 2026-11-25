@@ -15,3 +15,7 @@ gh repo clone vvangpc/mmffgic-src
 以后在源码目录正常 `git pull`、修改、提交和推送。发布新版时，把 `installer/VERSION` 与脚本改动一起推送到私有仓库 `main`。GitHub Actions 自动打包、签名、验证旧版升级和回滚，然后推送到本仓库并创建 Release。维护电脑只需已有的 GitHub 写入权限。已发布的文件在本公开仓库执行 `git pull --ff-only` 即可取得。
 
 网页面板单独部署。某台 VPS 何时升级，由该机的更新设置及操作者决定。
+
+## 家庭路由器
+
+家里的电脑拉取本仓库后，运行 `sh router/check-openclash.sh` 盘点 GL-MT3600BE，再让家庭 AI 按[OpenClash 交接报告](router/OPENCLASH-HANDOFF.md)适配和验收。脚本只读，真实订阅地址保存在家庭设备上。
