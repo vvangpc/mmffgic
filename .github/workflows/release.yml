@@ -1,0 +1,54 @@
+name: Publish verified release
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  publish:
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Verify signed files from this tag
+        shell: bash
+        run: |
+          set -euo pipefail
+          version=$(cat v)
+          [[ $version =~ ^[0-9]+\.[0-9]+\.[0-9]+$ && $GITHUB_REF_NAME == "v$version" ]]
+          mapfile -t fields <manifest
+          [[ ${#fields[@]} == 3 && ${fields[0]} == "$version" && ${fields[1]} =~ ^[a-f0-9]{64}$ && ${fields[2]} == manifest-v2 ]]
+          openssl pkeyutl -verify -pubin -inkey keys/release-0.5.12.pub -rawin -in manifest -sigfile manifest.sig
+          printf '%s  p.tgz\n' "${fields[1]}" | sha256sum -c -
+          [[ $(tar -xzOf p.tgz installer/VERSION) == "$version" ]]
+          cmp keys/release-0.5.12.pub <(tar -xzOf p.tgz installer/lib/release.pub)
+          cmp keys/release-0.5.12.pub <(sed -n '/^-----BEGIN PUBLIC KEY-----$/,/^-----END PUBLIC KEY-----$/p' i.sh)
+          bash -n i.sh
+      - name: Publish the five verified files
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag=$GITHUB_REF_NAME
+          files=(i.sh p.tgz v manifest manifest.sig)
+          if ! gh release view "$tag" >/dev/null 2>&1; then
+            notes="签名安装包。版本号和安装包摘要均受 Ed25519 签名保护。"
+            if [[ $tag == v0.5.12 ]]; then
+              notes="本版为 Clash 完整订阅添加节点 DNS，保留路由器节点订阅格式。已有 VPS 请先按[公钥迁移说明](https://github.com/vvangpc/mmffgic/blob/v0.5.12/migrations/0.5.12.md)更换发布公钥，再手动升级。"
+            fi
+            gh release create "$tag" --verify-tag --draft --title "$tag" --notes "$notes"
+          fi
+          if [[ $(gh release view "$tag" --json isDraft --jq .isDraft) == true ]]; then
+            gh release upload "$tag" "${files[@]}" --clobber
+            gh release edit "$tag" --draft=false
+          fi
+          tmp=$(mktemp -d)
+          gh release download "$tag" --dir "$tmp"
+          for asset in "${files[@]}"; do cmp "$asset" "$tmp/$asset"; done
