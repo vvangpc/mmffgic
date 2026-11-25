@@ -14,7 +14,7 @@ T=$(mktemp -d)
 trap 'rm -rf "$T"' EXIT
 cat >"$T/release.pub" <<'PUBLIC_KEY'
 -----BEGIN PUBLIC KEY-----
-MCowBQYDK2VwAyEANdF+GQ/cgARLrKngq4oqRlDSJ3UiRDQ9wRpoEMYQ1d8=
+MCowBQYDK2VwAyEAUqys6H2To6Aa6UJ1pK5xoVigvSop30/aoYvQs2AklGs=
 -----END PUBLIC KEY-----
 PUBLIC_KEY
 #!/usr/bin/env bash
